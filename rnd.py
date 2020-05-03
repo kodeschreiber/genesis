@@ -25,7 +25,7 @@ class Seeder:
   def float(self):
     return int(self._get_value_(), 16) / float(2**(self._count * 4))
 
-  def range(**args):
+  def range(self, **args):
     min = 0
     max = 0
     if len(args) == 1:
@@ -35,6 +35,14 @@ class Seeder:
     else:
       max = 2**(self._count * 4)
     return (int(self._get_value_(), 16) % (max-min)) + min
+
+  def frange(self, **args):
+    prec = -1
+    for x in args:
+      cur = len(str(x).split('.')[1])
+      if cur > prec:
+        prec = cur
+    return self.range([ int(x*(10**prec)) for x in args ])/float(10**prec)
 
   def polar(self):
     return -1 if (self._get_value_ % 2) == 0 else 1
@@ -61,8 +69,9 @@ sample_rate = 20.0
 frequency = 1
 variance = 30
 flatness = 0.0001
-water_vol = seedobj.range(3, 35)/100.0
-air_vol = seedobj.range(1, 90)/100.0
+water_vol = seedobj.frange(0.3, 0.35)
+air_vol = seedobj.frange(0.01, 0.90)
+mantle_vol = seedobj.frange(0.01, 0.30)
 
 # And each modus operandi was enuciated in runic fashion within the lexicon of the Alchemist;
 # for change is the nature of all, some of the greatest, some of the slight
@@ -96,9 +105,11 @@ class Point:
     wind = 0.0
     hail = 0.0
     solar = 0.0
+    lava = 0.0
+    blaze = 0.0
 
   def earth(self):
-    return self.igneous + self.smooth + self.boulder + self.cobbled + self.gravel + self.sand + self.lycanned + self.weeded + self.dirt + self.grass + self.mud
+    return self.igneous + self.smooth + self.boulder + self.cobbled + self.gravel + self.sand + self.lycanned + self.weeded + self.dirt + self.grass + self.mud + self.lava
 
   def water(self):
     return self.alginated + self.murky + self.clearwater
@@ -107,7 +118,7 @@ class Point:
     return self.clear + self.fogged + self.cloud + self.wind + self.hail
 
   def fire(self):
-    return self.magmatic + self.scorched + self.solar
+    return self.magmatic + self.scorched + self.solar = self.blaze
 
   def total(self):
     return self.earth() + self.water() + self.air() + self.fire()
@@ -150,6 +161,27 @@ def meshran(xmax, ymax):
     for j in range(ymax):
       yeild (i, j)
 
+def get_stars(seedobj):
+  pass
+
+def prox(pt, rad, dim):
+  pts = list()
+  spt = (pt[0] - rad, pt[1] - rad)
+  ept = (pt[0] - rad, pt[1] - rad)
+  if spt[0] < 0:
+    spt[0] = 0
+  if spt[1] < 0:
+    spt[1] = 0
+  if ept[0] > dim[0]:
+    ept[0] = dim[0]-1
+  if ept[1] > dim[1]:
+    ept[1] = dim[1]-1
+  for x in range(ept[0]-spt[0]):
+    for y in range(ept[1]-spt[1]):
+      if math.sqrt((x - pt[0])**2 + (y - pt[0])**2) <= rad:
+        pts.append((x,y))
+  return pts
+
 # At first, there was a plane, as flat to the horizons
 grid = list()
 for i in range(width):
@@ -173,6 +205,8 @@ for x, y in meshran(width, length):
     grid[x][y].clear = air_vol - (grid[x][y].earth() + grid[x][y].water())
     if grid[x][y].total() > 1:
       grid[x][y].clear = 1 - (grid[x][y].earth() + grid[x][y].water())
+
+# From below, the magmatic forces of the land
 
 # From the heavens the Alchemist conjured massive hydroplanes to blanket the sky. From them
 # would many droplets of water precipitate upon the land, filing their way to it's lowest points
