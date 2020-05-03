@@ -224,37 +224,31 @@ class Celestial:
 
 @dataclass
 class Recipe:
-  inputs: typing.Dict
-  outputs: typing.Dict
+  reagents: typing.Dict
+  iter: int
 
   def volume_check(self):
-    return round(sum(self.inputs.values()), 5) == round(sum(self.outputs.values()), 5)
+    return round(sum(self.reagents.values()), 5)
 
-  def __can_perform__(self, pt):
-    for k,v in self.inputs.items():
-      if getattr(pr, k) < v:
+  def validate(self, pt):
+    for k,v in self.reagents.items():
+      if v > 0 and getattr(pr, k) < v:
         return False
     return True
 
   def attempt(self, pt):
-    if self.__can_perform__(pt):
-      for k,v in self.inputs.items():
-        setattr(pt, k, getattr(pt, k) - v)
-      for k,v in self.outputs.items():
+    if self.validate(pt):
+      for k,v in self.reagents.items():
         setattr(pt, k, getattr(pt, k) + v)
-
-  def dryrun(self, pt):
-    pass
-
-  def total(self):
-    return round(sum(self.inputs.values()), 5) * 2
 
 
 @dataclass
 class LateralRecipe:
   origin: Recipe
   destination: Recipe
-  radius: float
+  radius: int
+  iter: int
+  up: bool
 
   def move(self):
     pass
