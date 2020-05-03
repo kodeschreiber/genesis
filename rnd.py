@@ -1,7 +1,9 @@
 import math
 import hashlib
 import typing
+import yaml
 import multiprocessing as mp
+from dataclasses import dataclass
 
 class Seeder:
   _min = 2
@@ -78,8 +80,11 @@ earth_vol = seedobj.frange(0.55, 0.90)
 water_vol = seedobj.frange(0.3, 0.35)
 air_vol = seedobj.frange(0.01, 0.90)
 fire_vol = seedobj.frange(0.01, 0.30)
-stars = list()  # (float(intensity), int(radius))
+stars = list()  # (float: intensity, int: radius, )
 star_odds = [ 0.85, 0.25, 0.05 ]
+steps = 100
+precipes = None
+lrecipes = None
 
 
 # And each modus operandi was enuciated in runic fashion within the lexicon of the Alchemist;
@@ -130,10 +135,10 @@ class Point:
     self.cobbled = 0.0
     self.gravel = 0.0
     self.sand = 0.0
-    self.lycanned = 0.0
-    self.weeded = 0.0
+    self.lycan = 0.0
+    self.weeds = 0.0
     self.dirt = 0.0
-    self.grassy = 0.0
+    self.grass = 0.0
     self.mud = 0.0
     self.cloud = 0.0
     self.clear = 0.0
@@ -143,9 +148,9 @@ class Point:
     self.magmatic = 0.0
     self.scorched = 0.0
     self.snow = 0.0
-    self.iced = 0.0
-    self.fogged = 0.0
-    self.smogged = 0.0
+    self.ice = 0.0
+    self.fog = 0.0
+    self.smoke = 0.0
     self.rain = 0.0
     self.wind = 0.0
     self.hail = 0.0
@@ -186,13 +191,74 @@ class Sine:
   def randinit(seedobj, frequency, sample_rate):
     return Sine(seedobj.fpolar(), seedobj.ripolar(frequency), sample_rate, seedobj.fpolar())
 
-# def calc_mesh(grid: IterGrid, seedobj, variance, frequency, sample_rate):
-#   ret = list
-#   X = [ Sine.randinit(seedobj, frequency, sample_rate) for i in range(variance) ]
-#   Y = [ Sine.randinit(seedobj, frequency, sample_rate) for i in range(variance) ]
-#   for xpt in range(width):
-#     for ypt in range(length):
-#       ret.append((xpt, ypt, sum([ j.calc(xpt) for j in X ]) * sum([ k.calc(ypt) for k in Y ])))
+@dataclass
+class Celestial:
+  cx: int
+  cy: int
+  lumosity: float
+  peak: float
+  speed: float
+  arc: float
+  offset: float
+  direction: bool
+
+  def move(self, dx):
+    dire = 1 if self.direction else -1
+    self.cx = dx * self.speed
+    self.cy = dire * (arc * dx) + offset
+
+  def rads_at(pt):
+    dist = math.sqrt((pt[0] - ctr[0])**2 + (pt[1] - ctr[1])**2)
+    return ((-0.1 * dist**2 + self.peak) / self.peak) * self.lumosity
+
+  def sr_star(seedobj, width, length):
+    return Celestial( seedobj.range(width),
+                      seedobj.range(length),
+                      seedobj.frange(0.05, 0.95),
+                      seedobj.frange(0.10, 0.80) * int((width + length)/2),
+                      seedobj.frange(0.001, 1.0) * 10,
+                      seedobj.frange(0.001, 1.0) * 10,
+                      seedobj.range(width/2),
+                      seedobj.odds(0.5),
+                    )
+
+@dataclass
+class Recipe:
+  inputs: typing.Dict
+  outputs: typing.Dict
+
+  def volume_check(self):
+    return round(sum(self.inputs.values()), 5) == round(sum(self.outputs.values()), 5)
+
+  def __can_perform__(self, pt):
+    for k,v in self.inputs.items():
+      if getattr(pr, k) < v:
+        return False
+    return True
+
+  def attempt(self, pt):
+    if self.__can_perform__(pt):
+      for k,v in self.inputs.items():
+        setattr(pt, k, getattr(pt, k) - v)
+      for k,v in self.outputs.items():
+        setattr(pt, k, getattr(pt, k) + v)
+
+  def dryrun(self, pt):
+    pass
+
+  def total(self):
+    return round(sum(self.inputs.values()), 5) * 2
+
+
+@dataclass
+class LateralRecipe:
+  origin: Recipe
+  destination: Recipe
+  radius: float
+
+  def move(self):
+    pass
+
 
 def give_me_a_sine(seedobj, frequency, sample_rate, variance):
   return [ Sine.randinit(seedobj, frequency, sample_rate) for i in range(variance) ]
@@ -206,9 +272,6 @@ def level_with_me(grid, attr, top):
   tmax = top/float(max(Z) + low)
   for pt in grid:
     setattr(pt, attr, int((z + low) * tmax))
-
-def get_stars(seedobj):
-  pass
 
 def prox(pt, rad, dim):
   pts = list()
@@ -228,8 +291,10 @@ def prox(pt, rad, dim):
         pts.append((x,y))
   return pts
 
-def fshift(pts):
-  pass
+with open('recipes.yaml', 'r') as yfile:
+  data = yaml.load(yfile, yaml.Loader)
+  precipes = [ Recipe(**rec) for rec in data['point'] ]
+  lrecipes = [ LateralRecipe(**rec) for rec in data['lateral'] ]
 
 # At first, there was a plane, as flat to the horizons
 grid = IterGrid(width, length)
@@ -263,7 +328,7 @@ level_with_me(grid, 'magmatic', fire_vol)
 # From the heavens were the celestials strewn, casting their light over all
 for val in star_odds:
   if seedobj.odds(val):
-    stars.append((seedobj.frange(0.05, 0.95), seedobj.range(rstar[0], rstar[1])))
+    stars.append(Celestial.sr_star(seedobj, width, length))
 
 # From the heavens the Alchemist conjured massive hydroplanes to blanket the sky. From them
 # would many droplets of water precipitate upon the land, filing their way to it's lowest points

@@ -1,0 +1,40 @@
+# Primordial
+smooth      # Earth
+clearwater  # Water  # Moves
+clear       # Air
+magmatic    # Fire
+solar       # Fire
+
+
+# Earth
+igneous
+boulder
+cobbled
+gravel  # Moves
+sand    # Moves
+
+# Water
+
+# Fire
+blaze  # Moves
+
+# Dual attributed
+lava  # Moves
+dirt
+mud   # Moves
+murky # Moves
+cloud # Moves
+snow
+ice
+fog
+smoke # Moves
+rain
+wind  # Moves
+hail
+
+# Triple attributed
+alginated # Moves
+lycan
+weeds
+grass
+scorched
