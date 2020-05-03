@@ -79,34 +79,34 @@ mantle_vol = seedobj.frange(0.01, 0.30)
 class Point:
   capacity = 256
   def __init__(self):
-    igneous = 0.0
-    smooth = 0.0
-    boulder = 0.0
-    cobbled = 0.0
-    gravel = 0.0
-    sand = 0.0
-    lycanned = 0.0
-    weeded = 0.0
-    dirt = 0.0
-    grassy = 0.0
-    mud = 0.0
-    cloud = 0.0
-    clear = 0.0
-    clearwater = 0.0
-    murky = 0.0
-    alginated = 0.0
-    magmatic = 0.0
-    scorched = 0.0
-    snow = 0.0
-    iced = 0.0
-    fogged = 0.0
-    smogged = 0.0
-    rain = 0.0
-    wind = 0.0
-    hail = 0.0
-    solar = 0.0
-    lava = 0.0
-    blaze = 0.0
+    self.igneous = 0.0
+    self.smooth = 0.0
+    self.boulder = 0.0
+    self.cobbled = 0.0
+    self.gravel = 0.0
+    self.sand = 0.0
+    self.lycanned = 0.0
+    self.weeded = 0.0
+    self.dirt = 0.0
+    self.grassy = 0.0
+    self.mud = 0.0
+    self.cloud = 0.0
+    self.clear = 0.0
+    self.clearwater = 0.0
+    self.murky = 0.0
+    self.alginated = 0.0
+    self.magmatic = 0.0
+    self.scorched = 0.0
+    self.snow = 0.0
+    self.iced = 0.0
+    self.fogged = 0.0
+    self.smogged = 0.0
+    self.rain = 0.0
+    self.wind = 0.0
+    self.hail = 0.0
+    self.solar = 0.0
+    self.lava = 0.0
+    self.blaze = 0.0
 
   def earth(self):
     return self.igneous + self.smooth + self.boulder + self.cobbled + self.gravel + self.sand + self.lycanned + self.weeded + self.dirt + self.grass + self.mud + self.lava
@@ -182,6 +182,9 @@ def prox(pt, rad, dim):
         pts.append((x,y))
   return pts
 
+def fshift(pts):
+
+
 # At first, there was a plane, as flat to the horizons
 grid = list()
 for i in range(width):
@@ -203,10 +206,11 @@ for x, y in meshran(width, length):
 for x, y in meshran(width, length):
   if grid[x][y].earth() + grid[x][y].water() < air_vol:
     grid[x][y].clear = air_vol - (grid[x][y].earth() + grid[x][y].water())
-    if grid[x][y].total() > 1:
-      grid[x][y].clear = 1 - (grid[x][y].earth() + grid[x][y].water())
 
-# From below, the magmatic forces of the land
+# From below, magmatic forces are driven forth
+pts = calc_mesh(seedobj, variance, frequency, sample_rate, width, length)
+for x, y, z in level(pts, mantle_vol):
+  grid[x][y].magmatic = z
 
 # From the heavens the Alchemist conjured massive hydroplanes to blanket the sky. From them
 # would many droplets of water precipitate upon the land, filing their way to it's lowest points
