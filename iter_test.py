@@ -8,6 +8,8 @@ class IterGrid:
     self.__length = length
     self.__grid_data = list()
     self.__grid_len = width * length
+    self.x = 0
+    self.y = 0
     for i in range(width*length):
       self.__grid_data.append(None)
 
@@ -17,8 +19,10 @@ class IterGrid:
 
   def __next__(self):
     res = None
+    self.x = int(self.__pos / self.__length)
+    self.y = self.__pos % self.__length
     if not self.__fully_init:
-      res = (int(self.__pos / self.__length), self.__pos % self.__length)
+      res = (self.x, self.y)
     else:
       res = self.__grid_data[self.__pos]
 
@@ -34,8 +38,9 @@ class IterGrid:
     print(pt, (pt[0]*self.__length)+pt[1])
     self.__grid_data[(pt[0]*self.__length)+pt[1]] = val
 
-lol = Grid(2,5)
+lol = IterGrid(2,5)
 for pt in lol:
   lol.set(pt, int((time.time() - int(time.time())) * 1000000))
+  print(lol.x, lol.y)
 
 print(lol.__dict__)

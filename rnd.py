@@ -56,6 +56,10 @@ class Seeder:
   def odds(self, float_success):
     return self.float() <= float_success
 
+  def iter(self, **args):
+    for i in range(self.range(**args)):
+      yield i
+
 # The Alchemist's Genesis
 
 # As with many a histories of geometrical nature, it began with a compass and a square
@@ -69,9 +73,14 @@ sample_rate = 20.0
 frequency = 1
 variance = 30
 flatness = 0.0001
+rstar = (10, 1000)
+earth_vol = seedobj.frange(0.55, 0.90)
 water_vol = seedobj.frange(0.3, 0.35)
 air_vol = seedobj.frange(0.01, 0.90)
-mantle_vol = seedobj.frange(0.01, 0.30)
+fire_vol = seedobj.frange(0.01, 0.30)
+stars = list()  # (float(intensity), int(radius))
+star_odds = [ 0.85, 0.25, 0.05 ]
+
 
 # And each modus operandi was enuciated in runic fashion within the lexicon of the Alchemist;
 # for change is the nature of all, some of the greatest, some of the slight
@@ -93,8 +102,10 @@ class IterGrid:
 
   def __next__(self):
     res = None
+    self.x = int(self.__pos / self.__length)
+    self.y = self.__pos % self.__length
     if not self.__fully_init:
-      res = (int(self.__pos / self.__length), self.__pos % self.__length)
+      res = (self.x, self.y)
     else:
       res = self.__grid_data[self.__pos]
 
@@ -175,25 +186,26 @@ class Sine:
   def randinit(seedobj, frequency, sample_rate):
     return Sine(seedobj.fpolar(), seedobj.ripolar(frequency), sample_rate, seedobj.fpolar())
 
-def calc_mesh(seedobj, variance, frequency, sample_rate, width, length):
-  ret = list
-  X = [ Sine.randinit(seedobj, frequency, sample_rate) for i in range(variance) ]
-  Y = [ Sine.randinit(seedobj, frequency, sample_rate) for i in range(variance) ]
-  for xpt in range(width):
-    for ypt in range(length):
-      ret.append((xpt, ypt, sum([ j.calc(xpt) for j in X ]) * sum([ k.calc(ypt) for k in Y ])))
+# def calc_mesh(grid: IterGrid, seedobj, variance, frequency, sample_rate):
+#   ret = list
+#   X = [ Sine.randinit(seedobj, frequency, sample_rate) for i in range(variance) ]
+#   Y = [ Sine.randinit(seedobj, frequency, sample_rate) for i in range(variance) ]
+#   for xpt in range(width):
+#     for ypt in range(length):
+#       ret.append((xpt, ypt, sum([ j.calc(xpt) for j in X ]) * sum([ k.calc(ypt) for k in Y ])))
 
-def level(zmesh, top):
-  Z = [ i[2] for i in zmesh ]
+def give_me_a_sine(seedobj, frequency, sample_rate, variance):
+  return [ Sine.randinit(seedobj, frequency, sample_rate) for i in range(variance) ]
+
+def you_are_my_sumsine(sinelist, pt):
+  return sum([ j.calc(pt) for j in sinelist ])
+
+def level_with_me(grid, attr, top):
+  Z = [ getattr(pt, attr) for pt in grid ]
   low = min(Z)
   tmax = top/float(max(Z) + low)
-  for x, y, z in zmesh:
-    yield (x, y, int((z + low) * tmax))
-
-def meshran(xmax, ymax):
-  for i in range(xmax):
-    for j in range(ymax):
-      yeild (i, j)
+  for pt in grid:
+    setattr(pt, attr, int((z + low) * tmax))
 
 def get_stars(seedobj):
   pass
@@ -217,34 +229,41 @@ def prox(pt, rad, dim):
   return pts
 
 def fshift(pts):
-
+  pass
 
 # At first, there was a plane, as flat to the horizons
-grid = list()
-for i in range(width):
-  grid[i] = list()
-  for j in range(length):
-    grid[i][j] = Point()
+grid = IterGrid(width, length)
+for pt in grid:
+  grid.set(pt, Point())
 
 # Then, by the shift of the earth, great mounds and valleys made their appearance
-pts = calc_mesh(seedobj, variance, frequency, sample_rate, width, length)
-for x, y, z in level(pts, 1):
-  grid[x][y].smooth = z
+X = give_me_a_sine(seedobj, frequency, sample_rate, variance)
+Y = give_me_a_sine(seedobj, frequency, sample_rate, variance)
+for pt in grid:
+  pt.smooth = you_are_my_sumsine(grid.x, X) * you_are_my_sumsine(grid.y, Y)
+level_with_me(grid, 'smooth', earth_vol)
 
 # From the ground was water ammased at all the lowest points
-for x, y in meshran(width, length):
-  if grid[x][y].earth() < water_vol:
-    grid[x][y].clearwater = water_vol - grid[x][y].earth()
+for pt in grid:
+  if pt.earth() < water_vol:
+    pt.clearwater = water_vol - pt.earth()
 
 # As the surface settles, extra-planar gasses decend upon the region
-for x, y in meshran(width, length):
-  if grid[x][y].earth() + grid[x][y].water() < air_vol:
-    grid[x][y].clear = air_vol - (grid[x][y].earth() + grid[x][y].water())
+for pt in grid
+  if pt.earth() + pt.water() < air_vol:
+    pt.clear = air_vol - (pt.earth() + pt.water())
 
 # From below, magmatic forces are driven forth
-pts = calc_mesh(seedobj, variance, frequency, sample_rate, width, length)
-for x, y, z in level(pts, mantle_vol):
-  grid[x][y].magmatic = z
+X = give_me_a_sine(seedobj, frequency, sample_rate, variance)
+Y = give_me_a_sine(seedobj, frequency, sample_rate, variance)
+for pt in grid:
+  pt.magmatic = you_are_my_sumsine(grid.x, X) * you_are_my_sumsine(grid.y, Y)
+level_with_me(grid, 'magmatic', fire_vol)
+
+# From the heavens were the celestials strewn, casting their light over all
+for val in star_odds:
+  if seedobj.odds(val):
+    stars.append((seedobj.frange(0.05, 0.95), seedobj.range(rstar[0], rstar[1])))
 
 # From the heavens the Alchemist conjured massive hydroplanes to blanket the sky. From them
 # would many droplets of water precipitate upon the land, filing their way to it's lowest points
