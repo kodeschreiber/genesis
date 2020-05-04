@@ -4,6 +4,8 @@ import typing
 import yaml
 import PIL
 import glob
+import logging
+import coloredlogs
 import multiprocessing as mp
 from dataclasses import dataclass
 
@@ -15,23 +17,26 @@ class Seeder:
     self._ptr = 0
     self._val = seed
     self._hash_()
-    self._count = (self._val[0] % (Seeder._max-Seeder._min)) + Seeder._min
+    self._count = (int(self._val[0],16) % (Seeder._max-Seeder._min)) + Seeder._min
 
   def _hash_(self):
-    self._val = hashlib.sha256(self._val).hexdigest()
+    self._val = hashlib.sha256(self._val.encode('utf-8')).hexdigest()
 
   def _get_value_(self):
     if (self._ptr + self._count) > Seeder._hash_length:
       self._hash_()
       self._ptr = 0
-    return self._val[self._ptr:self._ptr+self._count]
+    ret = self._val[self._ptr:self._ptr+self._count]
+    self._ptr += self._count
+    return ret
 
   def float(self):
     return int(self._get_value_(), 16) / float(2**(self._count * 4))
 
-  def range(self, **args):
+  def range(self, *args):
     min = 0
     max = 0
+    args = args[0] if isinstance(args[0], typing.List) else args
     if len(args) == 1:
       max = args[0]
     elif len(args) == 2:
@@ -40,7 +45,7 @@ class Seeder:
       max = 2**(self._count * 4)
     return (int(self._get_value_(), 16) % (max-min)) + min
 
-  def frange(self, **args):
+  def frange(self, *args):
     prec = -1
     for x in args:
       cur = len(str(x).split('.')[1])
@@ -49,49 +54,20 @@ class Seeder:
     return self.range([ int(x*(10**prec)) for x in args ])/float(10**prec)
 
   def polar(self):
-    return -1 if (self._get_value_ % 2) == 0 else 1
+    return -1 if (int(self._get_value_(), 16) % 2) == 0 else 1
 
   def fpolar(self):
     return self.polar() * self.float()
 
-  def ipolar(self, **args):
-    return self.polar() * self.range(**args)
+  def ipolar(self, *args):
+    return self.polar() * self.range(*args)
 
   def odds(self, float_success):
     return self.float() <= float_success
 
-  def iter(self, **args):
-    for i in range(self.range(**args)):
+  def iter(self, *args):
+    for i in range(self.range(*args)):
       yield i
-
-# The Alchemist's Genesis
-
-# As with many a histories of geometrical nature, it began with a compass and a square
-width = 1000
-length = 1000
-
-# Each literal had measure
-seedobj = Seeder("Abacab")
-impath = './img'
-scale = 16
-sample_rate = 20.0
-frequency = 1
-variance = 30
-flatness = 0.0001
-rstar = (10, 1000)
-earth_vol = seedobj.frange(0.55, 0.90)
-water_vol = seedobj.frange(0.3, 0.35)
-air_vol = seedobj.frange(0.01, 0.90)
-fire_vol = seedobj.frange(0.01, 0.30)
-stars = list()  # (float: intensity, int: radius, )
-star_odds = [ 0.85, 0.25, 0.05 ]
-steps = 100
-precipes = None
-lrecipes = None
-textures = None
-
-# And each modus operandi was enuciated in runic fashion within the lexicon of the Alchemist;
-# for change is the nature of all, some of the greatest, some of the slight
 
 class IterGrid:
   def __init__(self, width, length):
@@ -117,7 +93,7 @@ class IterGrid:
     else:
       res = self.__grid_data[self.__pos]
 
-    if self.__pos < self.__grid_len:
+    if self.__pos < self.__grid_len - 1:
       self.__pos += 1
     else:
       if not self.__fully_init:
@@ -130,6 +106,13 @@ class IterGrid:
 
   def get(self, pt):
     return self.__grid_data[(pt[0]*self.__length)+pt[1]]
+
+  def level_with_me(self, attr, top):
+    Z = [ getattr(pt, attr) for pt in self ]
+    low = min(Z)
+    tmax = top/float(max(Z) + low)
+    for pt in grid:
+      setattr(pt, attr, int((getattr(pt, attr) + low) * tmax))
 
 class Point:
   capacity = 256
@@ -164,16 +147,16 @@ class Point:
     self.blaze = 0.0
 
   def earth(self):
-    return self.igneous + self.smooth + self.boulder + self.cobbled + self.gravel + self.sand + self.lycanned + self.weeded + self.dirt + self.grass + self.mud + self.lava
+    return self.igneous + self.smooth + self.boulder + self.cobbled + self.gravel + self.sand + self.lycan + self.weeds + self.dirt + self.grass + self.mud + self.lava
 
   def water(self):
-    return self.alginated + self.murky + self.clearwater
+    return self.alginated + self.murky + self.clearwater + self.snow + self.ice
 
   def air(self):
-    return self.clear + self.fogged + self.cloud + self.wind + self.hail
+    return self.clear + self.fog + self.smoke + self.cloud + self.wind + self.hail + self.rain
 
   def fire(self):
-    return self.magmatic + self.scorched + self.solar = self.blaze
+    return self.magmatic + self.scorched + self.blaze  # Solar is a special case
 
   def total(self):
     return self.earth() + self.water() + self.air() + self.fire()
@@ -200,7 +183,15 @@ class Sine:
 
   @staticmethod
   def randinit(seedobj, frequency, sample_rate):
-    return Sine(seedobj.fpolar(), seedobj.ripolar(frequency), sample_rate, seedobj.fpolar())
+    return Sine(seedobj.fpolar(), seedobj.ipolar(frequency), sample_rate, seedobj.fpolar())
+
+  @staticmethod
+  def give_me_a_sine(seedobj, frequency, sample_rate, variance):
+    return [ Sine.randinit(seedobj, frequency, sample_rate) for i in range(variance) ]
+
+  @staticmethod
+  def you_are_my_sumsine(pt, sinelist):
+    return sum([ j.calc(pt) for j in sinelist ])
 
 @dataclass
 class Celestial:
@@ -216,10 +207,10 @@ class Celestial:
   def move(self, dx):
     dire = 1 if self.direction else -1
     self.cx = dx * self.speed
-    self.cy = dire * (arc * dx) + offset
+    self.cy = dire * (self.arc * dx) + self.offset
 
-  def rads_at(pt):
-    dist = math.sqrt((pt[0] - ctr[0])**2 + (pt[1] - ctr[1])**2)
+  def rads_at(self, pt):
+    dist = math.sqrt((pt[0] - self.cx)**2 + (pt[1] - self.cy)**2)
     return ((-0.1 * dist**2 + self.peak) / self.peak) * self.lumosity
 
   def sr_star(seedobj, width, length):
@@ -250,7 +241,7 @@ class Recipe:
 
   def validate(self, pt):
     for k,v in self.reagents.items():
-      if v < 0 and getattr(pr, k) < (-1*v):
+      if v < 0 and getattr(pt, k) < (-1*v):
         return False
     return True
 
@@ -278,33 +269,35 @@ class LateralRecipe:
   def balanced(self):
     self.origin.balanced()
     self.destination.balanced()
-    if self.origin.displacement() != self.destination.displacement():
-      raise ValueError(f'Material displacements are not equal: {self.origin.displacement()} != {self.destination.displacement()}')
+    # if self.origin.displacement() != self.destination.displacement():
+    #   print("Origin: {}, Destination: {}".format(self.origin.reagents, self.destination.reagents))
+    #   raise ValueError('Material displacements are not equal: {} != {}'.format(self.origin.displacement(), self.destination.displacement()))
 
   def validate(self, cpt, npt):
     return self.origin.validate(cpt) and self.destination.validate(npt)
 
   def attempt(self, grid, pt, dim):
     pts = list()
-    for rpt in self.prox(pt, dim):
+    for rpt in self.prox((grid.x, grid.y), dim):
       npt = grid.get(rpt)
       if self.up and (pt.earth() + pt.water()) < (npt.earth() + npt.water()):
         pts.append(npt)
       if not self.up and (pt.earth() + pt.water()) > (npt.earth() + npt.water()):
         pts.append((rpt, npt))
     spl = len(pts)
-    tmpo = Recipe({ k: v/spl for k,v in self.origin.items() }, 1)
-    tmpd = Recipe({ k: v/spl for k,v in self.destination.items() }, 1)
-    for it in range(self.iter):
-      for npt in pts:
-        if self.validate(pt, npt):
-          tmpo.attempt(pt)
-          tmpd.attempt(npt)
+    if spl > 0:
+      tmpo = Recipe({ k: v/spl for k,v in self.origin.reagents.items() }, 1)
+      tmpd = Recipe({ k: v/spl for k,v in self.destination.reagents.items() }, 1)
+      for it in range(self.iter):
+        for npt in pts:
+          if self.validate(pt, npt):
+            tmpo.attempt(pt)
+            tmpd.attempt(npt)
 
   def prox(self, pt, dim):
     pts = list()
-    spt = (pt[0] - rad, pt[1] - rad)
-    ept = (pt[0] - rad, pt[1] - rad)
+    spt = [pt[0] - self.radius, pt[1] - self.radius]
+    ept = [pt[0] + self.radius, pt[1] + self.radius]
     if spt[0] < 0:
       spt[0] = 0
     if spt[1] < 0:
@@ -313,9 +306,9 @@ class LateralRecipe:
       ept[0] = dim[0]-1
     if ept[1] > dim[1]:
       ept[1] = dim[1]-1
-    for x in range(ept[0]-spt[0]):
-      for y in range(ept[1]-spt[1]):
-        if math.sqrt((x - pt[0])**2 + (y - pt[0])**2) <= rad:
+    for x in range(int(ept[0]-spt[0])):
+      for y in range(int(ept[1]-spt[1])):
+        if math.sqrt((x - pt[0])**2 + (y - pt[0])**2) <= self.radius:
           pts.append((x,y))
     return pts
 
@@ -325,7 +318,7 @@ class Texture:
   alpha: float
 
   def generate(self, scale, amount, dirpath):
-    with PIL.Image.open(glob.glob(f'{dirpath}/{self.name}.*'), mode='r') as im:
+    with PIL.Image.open(glob.glob('%s/%s.*' % (dirpath, self.name)), mode='r') as im:
       side = min(im.size)
       ret = im.crop(0, 0, side, side)
       ret = ret.convert('RGBA')
@@ -333,68 +326,101 @@ class Texture:
       ret.putalpha(int(255 * self.alpha * amount))
       return ret
 
-def give_me_a_sine(seedobj, frequency, sample_rate, variance):
-  return [ Sine.randinit(seedobj, frequency, sample_rate) for i in range(variance) ]
+log = logging.getLogger("tracer")
+log.addHandler(logging.FileHandler("./tracer.log"))
+coloredlogs.install(level='INFO')
 
-def you_are_my_sumsine(sinelist, pt):
-  return sum([ j.calc(pt) for j in sinelist ])
+# The Alchemist's Genesis
 
-def level_with_me(grid, attr, top):
-  Z = [ getattr(pt, attr) for pt in grid ]
-  low = min(Z)
-  tmax = top/float(max(Z) + low)
-  for pt in grid:
-    setattr(pt, attr, int((z + low) * tmax))
+log.info("Setting variables")
+# As with many a histories of geometrical nature, it began with a compass and a square
+width = 100
+length = 100
 
+# Each literal had measure
+seedobj = Seeder("Abacab")
+impath = './img'
+mapfile = 'map.png'
+scale = 16
+sample_rate = 20.0
+frequency = 1
+variance = 30
+flatness = 0.0001
+rstar = (10, 1000)
+earth_vol = seedobj.frange(0.55, 0.90)
+water_vol = seedobj.frange(0.3, 0.35)
+air_vol = seedobj.frange(0.01, 0.90)
+fire_vol = seedobj.frange(0.01, 0.30)
+stars = list()  # (float: intensity, int: radius, )
+star_odds = [ 0.85, 0.25, 0.05 ]
+steps = 100
+precipes = None
+lrecipes = None
+textures = None
+
+# And each modus operandi was enuciated in runic fashion within the lexicon of the Alchemist;
+# for change is the nature of all, some of the greatest, some of the slight
+
+log.info("Loading recipes")
 with open('recipes.yaml', 'r') as yfile:
   data = yaml.load(yfile, yaml.Loader)
-  precipes = [ Recipe(**rec) for rec in data['point'] ]
-  lrecipes = [ LateralRecipe(**rec) for rec in data['lateral'] ]
-  textures = [ Texture(k, v) for k,v in data['texture'] ]
+  precipes = [ Recipe(*rec) for rec in data['point'] ]
+  lrecipes = [ LateralRecipe(*rec) for rec in data['lateral'] ]
+  textures = [ Texture(k, v) for k,v in data['texture'].items() ]
 
+log.info("Validating point recipes")
 for rec in precipes:
   rec.balanced()
 
+log.info("Validating lateral recipes")
 for rec in lrecipes:
   rec.balanced()
 
 # At first, there was a plane, as flat to the horizons
+log.info("Generating grid")
 grid = IterGrid(width, length)
 for pt in grid:
   grid.set(pt, Point())
 
 # Then, by the shift of the earth, great mounds and valleys made their appearance
-X = give_me_a_sine(seedobj, frequency, sample_rate, variance)
-Y = give_me_a_sine(seedobj, frequency, sample_rate, variance)
+log.info("Generating terrain")
+X = Sine.give_me_a_sine(seedobj, frequency, sample_rate, variance)
+Y = Sine.give_me_a_sine(seedobj, frequency, sample_rate, variance)
 for pt in grid:
-  pt.smooth = you_are_my_sumsine(grid.x, X) * you_are_my_sumsine(grid.y, Y)
-level_with_me(grid, 'smooth', earth_vol)
+  pt.smooth = Sine.you_are_my_sumsine(grid.x, X) * Sine.you_are_my_sumsine(grid.y, Y)
+grid.level_with_me('smooth', earth_vol)
 
-# From the ground was water ammased at all the lowest points
+# From the ground was water amassed at all the lowest points
+log.info("Generating water")
 for pt in grid:
   if pt.earth() < water_vol:
     pt.clearwater = water_vol - pt.earth()
 
 # As the surface settles, extra-planar gasses decend upon the region
-for pt in grid
+log.info("Generating air")
+for pt in grid:
   if pt.earth() + pt.water() < air_vol:
     pt.clear = air_vol - (pt.earth() + pt.water())
 
 # From below, magmatic forces are driven forth
-X = give_me_a_sine(seedobj, frequency, sample_rate, variance)
-Y = give_me_a_sine(seedobj, frequency, sample_rate, variance)
+log.info("Generating mantle")
+X = Sine.give_me_a_sine(seedobj, frequency, sample_rate, variance)
+Y = Sine.give_me_a_sine(seedobj, frequency, sample_rate, variance)
 for pt in grid:
-  pt.magmatic = you_are_my_sumsine(grid.x, X) * you_are_my_sumsine(grid.y, Y)
-level_with_me(grid, 'magmatic', fire_vol)
+  pt.magmatic = Sine.you_are_my_sumsine(grid.x, X) * Sine.you_are_my_sumsine(grid.y, Y)
+grid.level_with_me('magmatic', fire_vol)
 
 # From the heavens were the celestials strewn, casting their light over all
+log.info("Creating the heavens")
 for val in star_odds:
   if seedobj.odds(val):
     stars.append(Celestial.sr_star(seedobj, width, length))
 
 # From the heavens the Alchemist conjured massive hydroplanes to blanket the sky. From them
 # would many droplets of water precipitate upon the land, filing their way to it's lowest points
+log.warning("### BEGINNING THE SIMULATION ###")
 for minute in range(steps):
+  log.info(f"Starting step {minute}")
   for pt in grid:
     pt.solar = max([ i.rads_at((grid.x, grid.y)) for i in stars ])
     for rec in precipes:
@@ -404,7 +430,9 @@ for minute in range(steps):
     for str in stars:
       str.move(1)
 
+log.info("Rasterizing")
 map = PIL.Image.new(mode='RGBA', size=(scale*width, scale*length))
 for pt in grid:
   map.paste(pt.render(textures, scale, impath), (grid.x*scale, grid.y*scale, (grid.x+1)*scale, (grid.y+1)*scale) )
-map.save('map.png')
+map.save(mapfile)
+log.info('Saved map to %s' % mapfile)
