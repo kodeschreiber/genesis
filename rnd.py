@@ -2,6 +2,8 @@ import math
 import hashlib
 import typing
 import yaml
+import PIL
+import glob
 import multiprocessing as mp
 from dataclasses import dataclass
 
@@ -70,7 +72,8 @@ length = 1000
 
 # Each literal had measure
 seedobj = Seeder("Abacab")
-scale = 10
+impath = './img'
+scale = 16
 sample_rate = 20.0
 frequency = 1
 variance = 30
@@ -85,7 +88,7 @@ star_odds = [ 0.85, 0.25, 0.05 ]
 steps = 100
 precipes = None
 lrecipes = None
-
+textures = None
 
 # And each modus operandi was enuciated in runic fashion within the lexicon of the Alchemist;
 # for change is the nature of all, some of the greatest, some of the slight
@@ -123,8 +126,10 @@ class IterGrid:
     return res
 
   def set(self, pt, val):
-    print(pt, (pt[0]*self.__length)+pt[1])
     self.__grid_data[(pt[0]*self.__length)+pt[1]] = val
+
+  def get(self, pt):
+    return self.__grid_data[(pt[0]*self.__length)+pt[1]]
 
 class Point:
   capacity = 256
@@ -172,6 +177,12 @@ class Point:
 
   def total(self):
     return self.earth() + self.water() + self.air() + self.fire()
+
+  def render(self, textures, scale, dirpath):
+    total = PIL.Image.new(mode='RGBA', size=(scale,scale))
+    for tex in textures:
+      PIL.Image.alpha_composite(total, tex.generate(scale, getattr(self, tex.name), dirpath))
+    return total
 
 class Sine:
   def __init__(self, scalar, frequency, sample_rate, offset):
@@ -227,20 +238,27 @@ class Recipe:
   reagents: typing.Dict
   iter: int
 
-  def volume_check(self):
+  def displacement(self):
+    return round(sum([ abs(i) for i in self.reagents.values() ]), 5)
+
+  def total(self):
     return round(sum(self.reagents.values()), 5)
+
+  def balanced(self):
+    if self.total() != 0.0:
+      raise ValueError(f"Recipe not balanced: {self.reagents}")
 
   def validate(self, pt):
     for k,v in self.reagents.items():
-      if v > 0 and getattr(pr, k) < v:
+      if v < 0 and getattr(pr, k) < (-1*v):
         return False
     return True
 
   def attempt(self, pt):
-    if self.validate(pt):
-      for k,v in self.reagents.items():
-        setattr(pt, k, getattr(pt, k) + v)
-
+    for i in range(self.iter):
+      if self.validate(pt):
+        for k,v in self.reagents.items():
+          setattr(pt, k, getattr(pt, k) + v)
 
 @dataclass
 class LateralRecipe:
@@ -250,9 +268,70 @@ class LateralRecipe:
   iter: int
   up: bool
 
-  def move(self):
-    pass
+  def __init__(self, rec1, rec2, rad, iter, up):
+    self.origin = Recipe(rec1, 1)
+    self.destination = Recipe(rec2, 1)
+    self.radius = rad
+    self.iter = iter
+    self.up = up
 
+  def balanced(self):
+    self.origin.balanced()
+    self.destination.balanced()
+    if self.origin.displacement() != self.destination.displacement():
+      raise ValueError(f'Material displacements are not equal: {self.origin.displacement()} != {self.destination.displacement()}')
+
+  def validate(self, cpt, npt):
+    return self.origin.validate(cpt) and self.destination.validate(npt)
+
+  def attempt(self, grid, pt, dim):
+    pts = list()
+    for rpt in self.prox(pt, dim):
+      npt = grid.get(rpt)
+      if self.up and (pt.earth() + pt.water()) < (npt.earth() + npt.water()):
+        pts.append(npt)
+      if not self.up and (pt.earth() + pt.water()) > (npt.earth() + npt.water()):
+        pts.append((rpt, npt))
+    spl = len(pts)
+    tmpo = Recipe({ k: v/spl for k,v in self.origin.items() }, 1)
+    tmpd = Recipe({ k: v/spl for k,v in self.destination.items() }, 1)
+    for it in range(self.iter):
+      for npt in pts:
+        if self.validate(pt, npt):
+          tmpo.attempt(pt)
+          tmpd.attempt(npt)
+
+  def prox(self, pt, dim):
+    pts = list()
+    spt = (pt[0] - rad, pt[1] - rad)
+    ept = (pt[0] - rad, pt[1] - rad)
+    if spt[0] < 0:
+      spt[0] = 0
+    if spt[1] < 0:
+      spt[1] = 0
+    if ept[0] > dim[0]:
+      ept[0] = dim[0]-1
+    if ept[1] > dim[1]:
+      ept[1] = dim[1]-1
+    for x in range(ept[0]-spt[0]):
+      for y in range(ept[1]-spt[1]):
+        if math.sqrt((x - pt[0])**2 + (y - pt[0])**2) <= rad:
+          pts.append((x,y))
+    return pts
+
+@dataclass
+class Texture:
+  name: str
+  alpha: float
+
+  def generate(self, scale, amount, dirpath):
+    with PIL.Image.open(glob.glob(f'{dirpath}/{self.name}.*'), mode='r') as im:
+      side = min(im.size)
+      ret = im.crop(0, 0, side, side)
+      ret = ret.convert('RGBA')
+      ret = ret.rescale((scale, scale), resample=PIL.Image.BILINEAR)
+      ret.putalpha(int(255 * self.alpha * amount))
+      return ret
 
 def give_me_a_sine(seedobj, frequency, sample_rate, variance):
   return [ Sine.randinit(seedobj, frequency, sample_rate) for i in range(variance) ]
@@ -267,28 +346,17 @@ def level_with_me(grid, attr, top):
   for pt in grid:
     setattr(pt, attr, int((z + low) * tmax))
 
-def prox(pt, rad, dim):
-  pts = list()
-  spt = (pt[0] - rad, pt[1] - rad)
-  ept = (pt[0] - rad, pt[1] - rad)
-  if spt[0] < 0:
-    spt[0] = 0
-  if spt[1] < 0:
-    spt[1] = 0
-  if ept[0] > dim[0]:
-    ept[0] = dim[0]-1
-  if ept[1] > dim[1]:
-    ept[1] = dim[1]-1
-  for x in range(ept[0]-spt[0]):
-    for y in range(ept[1]-spt[1]):
-      if math.sqrt((x - pt[0])**2 + (y - pt[0])**2) <= rad:
-        pts.append((x,y))
-  return pts
-
 with open('recipes.yaml', 'r') as yfile:
   data = yaml.load(yfile, yaml.Loader)
   precipes = [ Recipe(**rec) for rec in data['point'] ]
   lrecipes = [ LateralRecipe(**rec) for rec in data['lateral'] ]
+  textures = [ Texture(k, v) for k,v in data['texture'] ]
+
+for rec in precipes:
+  rec.balanced()
+
+for rec in lrecipes:
+  rec.balanced()
 
 # At first, there was a plane, as flat to the horizons
 grid = IterGrid(width, length)
@@ -326,6 +394,17 @@ for val in star_odds:
 
 # From the heavens the Alchemist conjured massive hydroplanes to blanket the sky. From them
 # would many droplets of water precipitate upon the land, filing their way to it's lowest points
-settled = False
-while not settled:
-  settled = True
+for minute in range(steps):
+  for pt in grid:
+    pt.solar = max([ i.rads_at((grid.x, grid.y)) for i in stars ])
+    for rec in precipes:
+      rec.attempt(pt)
+    for rec in lrecipes:
+      rec.attempt(grid, pt, (width, length))
+    for str in stars:
+      str.move(1)
+
+map = PIL.Image.new(mode='RGBA', size=(scale*width, scale*length))
+for pt in grid:
+  map.paste(pt.render(textures, scale, impath), (grid.x*scale, grid.y*scale, (grid.x+1)*scale, (grid.y+1)*scale) )
+map.save('map.png')

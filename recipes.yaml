@@ -28,6 +28,8 @@ point:
   - [ { wind: -0.001, gravel: -0.002, sand: 0.003 }, 3 ]
   - [ { wind: -0.001, cobbled: -0.002, gravel: 0.003 }, 2 ]
   - [ { wind: -0.001, boulder: -0.002, cobbled: 0.003 }, 1 ]
+  - [ { lycan: -0.005, smooth: -0.005, lycan: 0.004, boulder: 0.006 }, 1 ]
+  - [ { lycan: -0.005, boulder: -0.005, lycan: 0.004, gravel: 0.006 }, 1 ]
   - [ { lava: -0.001, water: -0.001, igneous: 0.002 }, 6 ]
   - [ { wind: -0.005, fog: -0.005, clear: 0.01 }, 2 ]
   - [ { wind: -0.005, smoke: -0.005, clear: 0.01 }, 2 ]
@@ -57,3 +59,31 @@ lateral:
 
 # name: alpha
 texture:
+  magmatic: 0.001
+  smooth: 0.99
+  cobbled: 0.99
+  gravel: 0.3
+  sand: 0.1
+  dirt: 0.3
+  lava: 0.99
+  igneous: 0.99
+  mud: 0.5
+  lycan: 0.99
+  weeds: 0.99
+  grass: 0.1
+  scorched: 0.15
+  clearwater: 0.1
+  alginated: 0.05
+  murky: 0.05
+  ice: 0.3
+  boulder: 0.99
+  snow: 0.75
+  blaze: 0.75
+  fog: 0.25
+  smoke: 0.25
+  cloud: 0.65
+  hail: 0.99
+  solar: 0.001
+  clear: 0.0
+  rain: 0.0
+  wind: 0.0
