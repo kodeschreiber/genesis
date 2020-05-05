@@ -59,31 +59,31 @@ lateral:
 
 # name: alpha
 texture:
-  magmatic: 0.99
+  magmatic: 0.001
   smooth: 0.99
   cobbled: 0.99
-  gravel: 0.99
-  sand: 0.99
-  dirt: 0.99
+  gravel: 0.3
+  sand: 0.1
+  dirt: 0.3
   lava: 0.99
   igneous: 0.99
-  mud: 0.99
+  mud: 0.5
   lycan: 0.99
   weeds: 0.99
-  grass: 0.99
-  scorched: 0.99
-  clearwater: 0.99
-  alginated: 0.99
-  murky: 0.99
-  ice: 0.99
+  grass: 0.1
+  scorched: 0.15
+  clearwater: 0.1
+  alginated: 0.05
+  murky: 0.05
+  ice: 0.3
   boulder: 0.99
-  snow: 0.99
-  blaze: 0.99
-  fog: 0.99
-  smoke: 0.99
-  cloud: 0.99
+  snow: 0.75
+  blaze: 0.75
+  fog: 0.25
+  smoke: 0.25
+  cloud: 0.65
   hail: 0.99
-  solar: 0.99
-  clear: 0.99
-  rain: 0.99
-  wind: 0.99
+  solar: 0.001
+  clear: 0.0
+  rain: 0.0
+  wind: 0.0

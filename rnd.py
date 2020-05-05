@@ -2,7 +2,7 @@ import math
 import hashlib
 import typing
 import yaml
-import PIL
+from PIL import Image as PIL_Image
 import glob
 import logging
 import coloredlogs
@@ -161,10 +161,10 @@ class Point:
   def total(self):
     return self.earth() + self.water() + self.air() + self.fire()
 
-  def render(self, textures, scale, dirpath):
-    total = PIL.Image.new(mode='RGBA', size=(scale,scale))
+  def render(self, textures, scale):
+    total = PIL_Image.new(mode='RGBA', size=(scale,scale))
     for tex in textures:
-      PIL.Image.alpha_composite(total, tex.generate(scale, getattr(self, tex.name), dirpath))
+      PIL_Image.alpha_composite(total, tex.generate(getattr(self, tex.name)))
     return total
 
 class Sine:
@@ -229,6 +229,11 @@ class Recipe:
   reagents: typing.Dict
   iter: int
 
+  def __init__(self, reagents, iter):
+    self.reagents = reagents
+    self.iter = iter
+    self.balanced()
+
   def displacement(self):
     return round(sum([ abs(i) for i in self.reagents.values() ]), 5)
 
@@ -265,13 +270,8 @@ class LateralRecipe:
     self.radius = rad
     self.iter = iter
     self.up = up
-
-  def balanced(self):
     self.origin.balanced()
     self.destination.balanced()
-    # if self.origin.displacement() != self.destination.displacement():
-    #   print("Origin: {}, Destination: {}".format(self.origin.reagents, self.destination.reagents))
-    #   raise ValueError('Material displacements are not equal: {} != {}'.format(self.origin.displacement(), self.destination.displacement()))
 
   def validate(self, cpt, npt):
     return self.origin.validate(cpt) and self.destination.validate(npt)
@@ -283,16 +283,16 @@ class LateralRecipe:
       if self.up and (pt.earth() + pt.water()) < (npt.earth() + npt.water()):
         pts.append(npt)
       if not self.up and (pt.earth() + pt.water()) > (npt.earth() + npt.water()):
-        pts.append((rpt, npt))
+        pts.append(npt)
     spl = len(pts)
     if spl > 0:
       tmpo = Recipe({ k: v/spl for k,v in self.origin.reagents.items() }, 1)
       tmpd = Recipe({ k: v/spl for k,v in self.destination.reagents.items() }, 1)
       for it in range(self.iter):
-        for npt in pts:
-          if self.validate(pt, npt):
+        for tpt in pts:
+          if self.validate(pt, tpt):
             tmpo.attempt(pt)
-            tmpd.attempt(npt)
+            tmpd.attempt(tpt)
 
   def prox(self, pt, dim):
     pts = list()
@@ -312,19 +312,24 @@ class LateralRecipe:
           pts.append((x,y))
     return pts
 
-@dataclass
 class Texture:
-  name: str
-  alpha: float
 
-  def generate(self, scale, amount, dirpath):
-    with PIL.Image.open(glob.glob('%s/%s.*' % (dirpath, self.name)), mode='r') as im:
+  def __init__(self, name, alpha, scale, dirpath):
+    self.name = name
+    self.alpha = alpha
+    file = glob.glob('%s/%s.*' % (dirpath, self.name))
+    if len(file) == 0:
+      raise ValueError(f"Could not locate texture for {self.name} in {dirpath}")
+    with PIL_Image.open(file[0], mode='r') as im:
       side = min(im.size)
-      ret = im.crop(0, 0, side, side)
-      ret = ret.convert('RGBA')
-      ret = ret.rescale((scale, scale), resample=PIL.Image.BILINEAR)
-      ret.putalpha(int(255 * self.alpha * amount))
-      return ret
+      self.img = im.crop((0, 0, side, side))
+      self.img = self.img.convert('RGBA')
+      self.img = self.img.resize((scale, scale), resample=PIL_Image.BILINEAR)
+
+  def generate(self, alpha):
+    ret = self.img.copy()
+    ret.putalpha(int(255 * self.alpha * alpha))
+    return ret
 
 log = logging.getLogger("tracer")
 log.addHandler(logging.FileHandler("./tracer.log"))
@@ -334,12 +339,12 @@ coloredlogs.install(level='INFO')
 
 log.info("Setting variables")
 # As with many a histories of geometrical nature, it began with a compass and a square
-width = 100
-length = 100
+width = 25
+length = 25
 
 # Each literal had measure
 seedobj = Seeder("Abacab")
-impath = './img'
+impath = './textures'
 mapfile = 'map.png'
 scale = 16
 sample_rate = 20.0
@@ -353,7 +358,7 @@ air_vol = seedobj.frange(0.01, 0.90)
 fire_vol = seedobj.frange(0.01, 0.30)
 stars = list()  # (float: intensity, int: radius, )
 star_odds = [ 0.85, 0.25, 0.05 ]
-steps = 100
+steps = 10
 precipes = None
 lrecipes = None
 textures = None
@@ -366,15 +371,7 @@ with open('recipes.yaml', 'r') as yfile:
   data = yaml.load(yfile, yaml.Loader)
   precipes = [ Recipe(*rec) for rec in data['point'] ]
   lrecipes = [ LateralRecipe(*rec) for rec in data['lateral'] ]
-  textures = [ Texture(k, v) for k,v in data['texture'].items() ]
-
-log.info("Validating point recipes")
-for rec in precipes:
-  rec.balanced()
-
-log.info("Validating lateral recipes")
-for rec in lrecipes:
-  rec.balanced()
+  textures = [ Texture(k, v, scale, impath) for k,v in data['texture'].items() ]
 
 # At first, there was a plane, as flat to the horizons
 log.info("Generating grid")
@@ -431,8 +428,8 @@ for minute in range(steps):
       str.move(1)
 
 log.info("Rasterizing")
-map = PIL.Image.new(mode='RGBA', size=(scale*width, scale*length))
+map = PIL_Image.new(mode='RGBA', size=(scale*width, scale*length))
 for pt in grid:
-  map.paste(pt.render(textures, scale, impath), (grid.x*scale, grid.y*scale, (grid.x+1)*scale, (grid.y+1)*scale) )
+  map.paste(pt.render(textures, scale), (grid.x*scale, grid.y*scale, (grid.x+1)*scale, (grid.y+1)*scale) )
 map.save(mapfile)
 log.info('Saved map to %s' % mapfile)
